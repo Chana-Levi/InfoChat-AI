@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Files and Chat</title>
+    <style>
+        /* Simple styling for chat */
+        .chat-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+
+        .messages {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+
+        .message.user {
+            text-align: right;
+            font-weight: bold;
+        }
+        .message.bot {
+            text-align: left;
+            color: blue;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="chat-container">
+        <!-- Initial Upload Form -->
+        <form action="{{ url_for('main_bp.upload_file') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+            <input type="text" id="role" name="role" placeholder="בחר סוג סוכן" required>
+            <input type="text" id="user-prompt" name="user_prompt" placeholder="כמה מילים על השירות" required>
+            <div>
+                <label for="fileUpload">Upload files:</label>
+                <input type="file" id="fileUpload" name="fileUpload" multiple required>
+            </div>
+            <div>
+                <label for="logoUpload">Upload company logo:</label>
+                <input type="file" id="logoUpload" name="logoUpload">
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+
+        <!-- Chat Interface -->
+        <div class="messages" id="messages"></div>
+        <form id="chat-form" style="display:none;">
+            <input type="text" id="chat-input" placeholder="Enter your message" required>
+            <button type="submit">Send</button>
+            <button type="button" id="reset-button">Reset Chat</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('chat-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const input = document.getElementById('chat-input');
+            const message = input.value;
+            if (!message) return;
+
+            // Display user's message
+            const messagesContainer = document.getElementById('messages');
+            const userMessage = document.createElement('div');
+            userMessage.classList.add('message', 'user');
+            userMessage.textContent = message;
+            messagesContainer.appendChild(userMessage);
+            input.value = '';
+
+            // Send message to server
+            const response = await fetch("{{ url_for('main_bp.chat') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message })
+            });
+
+            const result = await response.json();
+
+            // Display bot's response
+            const botMessage = document.createElement('div');
+            botMessage.classList.add('message', 'bot');
+            botMessage.textContent = result.response;
+            messagesContainer.appendChild(botMessage);
+
+            // Scroll to the bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+
+        // Handle reset button click
+        document.getElementById('reset-button').addEventListener('click', async () => {
+            const response = await fetch("{{ url_for('main_bp.reset') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            // Clear messages and display the initial bot response
+            const messagesContainer = document.getElementById('messages');
+            messagesContainer.innerHTML = '';
+
+            const botMessage = document.createElement('div');
+            botMessage.classList.add('message', 'bot');
+            botMessage.textContent = result.response;
+            messagesContainer.appendChild(botMessage);
+
+            // Display company logo if available
+            const logoPath = result.logo_path;
+            if (logoPath) {
+                const logo = document.createElement('img');
+                logo.src = `/static/${logoPath}`;
+                logo.alt = 'Company Logo';
+                logo.style.maxWidth = '100px';
+                if (!document.getElementById('company-logo')) {
+                    logo.id = 'company-logo';
+                    messagesContainer.insertBefore(logo, messagesContainer.firstChild);
+                } else {
+                    document.getElementById('company-logo').src = `/static/${logoPath}`;
+                }
+            }
+        });
+
+        // Show chat interface after form submission
+        document.getElementById('upload-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+
+            fetch(event.target.action, {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json()).then(data => {
+                // Hide upload form and show chat interface
+                document.getElementById('upload-form').style.display = 'none';
+                document.getElementById('chat-form').style.display = 'block';
+                // Display initial response
+                const messagesContainer = document.getElementById('messages');
+                const botMessage = document.createElement('div');
+                botMessage.classList.add('message', 'bot');
+                botMessage.textContent = data.response;
+                messagesContainer.appendChild(botMessage);
+
+                // Display company logo only once
+                if (data.logo_path) {
+                    const logo = document.createElement('img');
+                    logo.src = `/static/${data.logo_path}`;
+                    logo.alt = 'Company Logo';
+                    logo.style.maxWidth = '100px';
+                    if (!document.getElementById('company-logo')) {
+                        logo.id = 'company-logo';
+                        messagesContainer.insertBefore(logo, messagesContainer.firstChild);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

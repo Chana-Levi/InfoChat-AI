@@ -1,0 +1,139 @@
+מבנה התיקיות:
+
+my_flask_app/
+│
+├── app/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── main_routes.py
+│   │   ├── product_routes.py
+│   │   ├── about_routes.py
+│   │   ├── why_us_routes.py
+│   │   ├── contact_routes.py
+│   │   ├── chatbot_routes.py
+│   │
+│   ├── templates/
+│   │   ├── layout.html
+│   │   ├── index.html
+│   │   ├── product.html
+│   │   ├── about.html
+│   │   ├── why_us.html
+│   │   ├── contact.html
+│   │   ├── chatbot.html
+│   │
+│   ├── static/
+│       ├── css/
+│       ├── js/
+│       ├── images/
+│
+├── config.py
+├── run.py
+└── requirements.txt
+
+
+* כלל הדפים מלבד chatbot - הינם דפים קבועים בלי פונקציונאליות מסויימת. הן יסתכמו ב@rute/ לדף הרלוונטי, וקצת גאווה סקריפט כדי להפנות לאתרים אחרים (הפרונט עדין לא מאופיין עד הסוף)
+
+דף יצירת צ'אט בוט:  chatbot_routes.py
+בבק אנד:
+
+קלאס - chatbot createion - הוא קלאס שמכיל בתוכו פונקציה של llamaindex.
+הקלאס מקבל ערכים מקובץ גייסון:
+
+service role - מתקבל מהפרונט בתפריט גלילה (סוג שירות - מידע, שירות, מכירה, וכו')
+role - מתקבל מהפרונט בתפריט גלילה - בקטגוריות (איש מכירות, איש מידע וכו') - באתר זה יקרא (סוג סוכן)
+system prompt - פרומפט ברירת מחדל שצמוד לכל תפקיד בROLE (לא מופיע באתר בפועל)
+user prompt - מגיע מחלון טקסט באתר - הלקוח מזין את הפרומפט
+data - מגיע מהעלאת קבצים באתר (פורמט PDF, DOCX, TXT) 
+
+
+בתוך הקלאס יהיו 2 פונקציות עיקריות :
+אחת של הבוט עצמו - לדוגמא של קלאס של OPEN AI:
+class OpenAIClient:
+    def __init__(self, api_key=None):
+        self.client = OpenAI(api_key=api_key) if api_key else OpenAI()
+        self.my_assistant_id = None
+
+       def communicate_with_assistant(self, job_description):
+        system_prompt = f"""
+        You are an AI language model specialized in analyzing job descriptions and extractingthe requirements from the candidate. See the following job description:
+        {job_description}
+
+        --------------------------------------------
+        Your task is to read this job description and extract only the required skills from the candidate to fulfill this role,  categorizing them into "General," "Mandatory," and "Optional" sections. 
+        You should then output these categorized requirements in a JSON format make sure to give only job requirements and not job befitis.
+
+        The JSON format should have three keys:
+
+        1. "General": A list of required skills mentioned in the job description.
+        2. "Mandatory": A list of skills explicitly stated as mandatory.
+        3. "Optional": A list of skills explicitly stated as optional or advantageous.
+        Please ensure that the three lists are mutually exclusive, meaning each requirement or skill should appear in only one of the lists, categorized in the most appropriate category based on the descriptions.
+
+        Follow these steps:
+
+        1. Read the job description carefully.
+        2. Identify and categorize the requirements based on the provided definitions.
+        3. Ensure that each requirement is placed in only one of the three lists.
+        4. Ignore unrelevent fields like benefit from the job.
+        4. Output the results in the specified JSON format.
+        """
+        response = self.client.chat.completions.create(
+            temperature=0,
+            model=self.model,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+            ]
+        )
+        requirements = response.choices[0].message.content
+        return requirements
+בנוסף תהיה פונקציה נוספת לקריאה וחילוץ דאטה מקבצים לדוגמא :
+def extract_text_from_pdf(file_path):
+    doc = fitz.open(file_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
+
+
+def extract_text_from_docx(file_path):
+    try:
+        doc = Document(file_path)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        if not text.strip():
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        text += cell.text + "\n"
+        return text
+    except Exception as e:
+        print(f"Error reading DOCX file: {e}")
+        return ""
+
+
+
+כל החלק הזה עד כאן זה הדף של יצירת צ'אט בוט.
+
+
+אפיון DB:
+תהיה טבלה עיקרית של יוזרים:
+תהיה מורכבת מסוג החיבור (גוגל, אפל, שם משתמש +ססמה)
+תאריך הצטרפות
+מייל
+אימות מייל ( גם לאפל וגוגל וכאלה)
+
+בנוסף תהיה טבלה של צ'אט בוטים בפועל:
+כל לקוח שיוצר לעצמו צ'אט בוט - אוטומטית נפתח לו בDB טבלה שנקראת user (user number) chatbot (chatbot number).
+הטבלה מכילה את קובץ הגייסון עם ההגדרות של הלקוח ועוד שדה של is active  בצורה נומרית 0/1
+
+**** יש לשים לב שהיסטורית הצ'אט נשמרת היום רק בתצורה של רשימה - מכיוון שזאת גרסת דמו לדוגמא :
+    session['history'].append({"role": "assistant", "content": assistant_response})
+
+
